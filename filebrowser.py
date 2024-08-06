@@ -11,17 +11,19 @@ from typing import AnyStr, ClassVar, Optional
 
 import param
 
-from ..io import PeriodicCallback
-from ..layout import (
+from panel.io import PeriodicCallback
+from panel.layout import (
     Column, Divider, ListPanel, Row,
 )
-from ..models.widgets import DoubleClickEvent
-from ..util import fullpath
-from ..viewable import Layoutable
-from .base import CompositeWidget
-from .button import Button
-from .input import TextInput
-from .select import CrossSelector
+
+
+from panel.models.widgets import DoubleClickEvent
+from panel.util import fullpath
+from panel.viewable import Layoutable
+from panel.widgets.base import CompositeWidget
+from panel.widgets.button import Button
+from panel.widgets.input import TextInput
+from panel.widgets.select import CrossSelector
 
 
 def _scan_path(path: str, file_pattern='*') -> tuple[list[str], list[str]]:
@@ -103,7 +105,7 @@ class FileSelector(CompositeWidget):
     _composite_type: ClassVar[type[ListPanel]] = Column
 
     def __init__(self, directory: AnyStr | os.PathLike | None = None, **params):
-        from ..pane import Markdown
+        from panel.pane import Markdown
         if directory is not None:
             params['directory'] = fullpath(directory)
         if 'root_directory' in params:
@@ -163,7 +165,7 @@ class FileSelector(CompositeWidget):
 
     def _select_and_go(self, event: DoubleClickEvent):
         relpath = event.option.replace('📁', '').replace('⬆ ', '')
-        if relpath == '..':
+        if relpath == 'panel.':
             return self._go_up()
         sel = fullpath(os.path.join(self._cwd, relpath))
         if os.path.isdir(sel):
@@ -185,7 +187,7 @@ class FileSelector(CompositeWidget):
         return self.root_directory or self.directory
 
     def _update_value(self, event: param.parameterized.Event):
-        value = [v for v in event.new if v != '..' and (not self.only_files or os.path.isfile(v))]
+        value = [v for v in event.new if v != 'panel.' and (not self.only_files or os.path.isfile(v))]
         self._selector.value = value
         self.value = value
 
@@ -243,8 +245,8 @@ class FileSelector(CompositeWidget):
             for f in paths
         ]
         if not self._up.disabled:
-            paths.insert(0, '..')
-            abbreviated.insert(0, '⬆ ..')
+            paths.insert(0, 'panel.')
+            abbreviated.insert(0, '⬆ panel.')
 
         options = dict(zip(abbreviated, paths))
         self._selector.options = options
@@ -261,13 +263,13 @@ class FileSelector(CompositeWidget):
         denylist = self._selector._lists[False]
         options = dict(self._selector._items)
         self._selector.options.clear()
-        prefix = [] if self._up.disabled else [('⬆ ..', '..')]
+        prefix = [] if self._up.disabled else [('⬆ panel.', 'panel.')]
         self._selector.options.update(prefix+[
             (k, v) for k, v in options.items() if k in paths or v in self.value
         ])
         options = [o for o in denylist.options if o in paths]
         if not self._up.disabled:
-            options.insert(0, '⬆ ..')
+            options.insert(0, '⬆ panel.')
         denylist.options = options
 
     def _select(self, event: param.parameterized.Event):
