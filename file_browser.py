@@ -1,3 +1,4 @@
 import panel as pn
+from filebrowser import FileSelector
 
-files = pn.widgets.FileSelector('~').servable()
+files = FileSelector('~').servable()
