@@ -1,7 +1,8 @@
-import panel as pn
 import param
+import panel as pn
 import json
 from datafed.CommandLib import API
+from file_upload import file_upload_app, file_upload_app_view
 
 pn.extension()
 
@@ -61,6 +62,10 @@ class DataFedApp(param.Parameterized):
         self.logout_button.on_click(self.logout)
 
         self.projects_json_pane = pn.pane.JSON(object=None, name='Projects Output', depth=3, width=600, height=400)
+        self.metadata_json_pane = pn.pane.JSON(object=None, name='Metadata', depth=3, width=600, height=400)
+
+        # Watch for changes in file content from FileUploadApp
+        file_upload_app.param.watch(self.update_metadata_from_file_upload, 'file_content')
 
         self.param.watch(self.update_collections, 'selected_context')
 
@@ -109,15 +114,28 @@ class DataFedApp(param.Parameterized):
         except Exception as e:
             return [f"Error: {e}"]
 
+    def update_metadata_from_file_upload(self, event):
+        try:
+            file_content = json.loads(event.new)
+            self.metadata_json_pane.object = file_content
+        except json.JSONDecodeError:
+            self.metadata_json_pane.object = "Invalid JSON file"
+
     def create_record(self, event):
-        if not self.title or not self.metadata:
+        if not self.title or not file_upload_app.file_content:
             self.record_output = "Title and metadata are required"
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
-            print(f"self.selected_collection:{self.selected_collection[2:]}")
-            response = self.df_api.dataCreate(self.title, metadata=self.metadata, parent_id=self.selected_collection)
+            # Create record without raw data file
+            response = self.df_api.dataCreate(
+                title=self.title,
+                metadata=file_upload_app.file_content,
+                parent_id=self.selected_collection
+            )
+            record_id = response[0].data[0].id
+
             res = self.to_dict(str(response[0].data[0]))
             self.record_output = f"Record created: {res}"
         except Exception as e:
@@ -238,9 +256,15 @@ record_pane = pn.Column(
     pn.Param(app.param.selected_context, widgets={'selected_context': pn.widgets.Select}),
     pn.Param(app.param.selected_collection, widgets={'selected_collection': pn.widgets.Select}),
     pn.Tabs(
-        ("Create Record", pn.Column(pn.Param(app.param.title), pn.Param(app.param.metadata), app.create_button, pn.Param(app.param.record_output))),
+        ("Create Record", pn.Column(
+            pn.Param(app.param.title), 
+            file_upload_app_view,
+            app.metadata_json_pane,
+            app.create_button, 
+            pn.Param(app.param.record_output)
+        )),
         ("Read Record", pn.Column(pn.Param(app.param.record_id), app.read_button, pn.Param(app.param.record_output))),
-        ("Update Record", pn.Column(pn.Param(app.param.record_id), pn.Param(app.param.update_metadata), app.update_button, pn.Param(app.param.record_output))),
+        ("Update Record", pn.Column(pn.Param(app.param.record_id), pn.Param(app.param.update_metadata, widgets={'update_metadata': pn.widgets.TextAreaInput}), app.update_button, pn.Param(app.param.record_output))),
         ("Delete Record", pn.Column(pn.Param(app.param.record_id), app.delete_button, pn.Param(app.param.record_output))),
         ("Transfer Data", pn.Column(pn.Param(app.param.source_id), pn.Param(app.param.dest_collection), app.transfer_button, pn.Param(app.param.record_output))),
     )

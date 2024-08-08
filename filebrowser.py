@@ -3,7 +3,7 @@ from fnmatch import fnmatch
 import param
 import panel as pn
 from panel.layout import Column, Row, Divider
-from panel.widgets import CompositeWidget, Button, TextInput, CrossSelector
+from panel.widgets import CompositeWidget, Button, TextInput, CrossSelector, FileInput
 from panel.io import PeriodicCallback
 from panel.pane import Markdown
 
@@ -29,7 +29,7 @@ def _scan_path(path: str, file_pattern='*'):
 
 class FileSelector(CompositeWidget):
     directory = param.String(default=os.getcwd(), doc="The directory to explore.")
-    file_pattern = param.String(default='*', doc="A glob-like pattern to filter the files.")
+    file_pattern = param.String(default='*.json', doc="A glob-like pattern to filter the files.")
     only_files = param.Boolean(default=False, doc="Whether to only allow selecting files.")
     show_hidden = param.Boolean(default=False, doc="Whether to show hidden files and directories (starting with a period).")
     size = param.Integer(default=10, doc="The number of options shown at once.")
@@ -60,8 +60,10 @@ class FileSelector(CompositeWidget):
         self._directory = TextInput(value=self.directory, margin=(5, 10, 0, 0), width_policy='max', height_policy='max')
         self._go = Button(name='⬇', disabled=True, width=40, height=40, margin=(5, 5, 0, 0), align='center')
         self._reload = Button(name='↻', width=40, height=40, margin=(5, 0, 0, 10), align='center')
+        self._file_input = FileInput(accept='.json', margin=(5, 10, 0, 0))
+        self._file_input.param.watch(self._file_input_handler, 'value')
         self._nav_bar = Row(
-            self._back, self._forward, self._up, self._directory, self._go, self._reload,
+            self._back, self._forward, self._up, self._directory, self._go, self._reload, self._file_input,
             width_policy='max', margin=0
         )
         self._composite[:] = [self._nav_bar, Divider(margin=0), self._selector]
@@ -90,6 +92,15 @@ class FileSelector(CompositeWidget):
         self.param.watch(self._update_periodic, 'refresh_period')
         if self.refresh_period:
             self._periodic.start()
+
+    def _file_input_handler(self, event):
+        if event.new:
+            file_content = event.new.decode()
+            try:
+                file_json = json.loads(file_content)
+                self.value = [{'name': event.obj.filename, 'content': file_json}]
+            except json.JSONDecodeError:
+                self.value = [{'name': event.obj.filename, 'content': 'Invalid JSON'}]
 
     def _select_and_go(self, event):
         relpath = event.option.replace('📁', '').replace('⬆ ', '')
@@ -220,8 +231,3 @@ class FileSelector(CompositeWidget):
         path = self._cwd.split(os.path.sep)
         self._directory.value = os.path.sep.join(path[:-1]) or os.path.sep
         self._update_files(True)
-
-# Create the FileSelector widget and serve it
-file_selector = FileSelector(directory='/', file_pattern='*')
-pn.extension()
-file_selector.servable()
