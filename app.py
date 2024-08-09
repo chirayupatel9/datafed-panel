@@ -4,7 +4,7 @@ import json
 from datafed.CommandLib import API
 from file_upload import file_upload_app, file_upload_app_view
 
-pn.extension()
+pn.extension('material')
 
 class DataFedApp(param.Parameterized):
     df_api = param.ClassSelector(class_=API, default=None)
@@ -34,11 +34,13 @@ class DataFedApp(param.Parameterized):
     available_collections = param.List(default=[], label="Available Collections")
     selected_collection = param.Selector(objects=[], label="Select Collection")
 
+    show_login_panel = param.Boolean(default=False)
+
     def __init__(self, **params):
         params['df_api'] = API()  # Initialize df_api here to avoid pickling issues
         super().__init__(**params)
         self.login_button = pn.widgets.Button(name='Login', button_type='primary')
-        self.login_button.on_click(self.check_login)
+        self.login_button.on_click(self.toggle_login_panel)
         
         self.create_button = pn.widgets.Button(name='Create Record', button_type='primary')
         self.create_button.on_click(self.create_record)
@@ -63,11 +65,15 @@ class DataFedApp(param.Parameterized):
 
         self.projects_json_pane = pn.pane.JSON(object=None, name='Projects Output', depth=3, width=600, height=400)
         self.metadata_json_pane = pn.pane.JSON(object=None, name='Metadata', depth=3, width=600, height=400)
+        self.record_output_pane = pn.pane.Markdown("**No output yet**", name='Record Output', width=600)
 
         # Watch for changes in file content from FileUploadApp
         file_upload_app.param.watch(self.update_metadata_from_file_upload, 'file_content')
 
         self.param.watch(self.update_collections, 'selected_context')
+
+    def toggle_login_panel(self, event):
+        self.show_login_panel = True  # Set to True to open the login panel
 
     def check_login(self, event):
         try:
@@ -83,6 +89,7 @@ class DataFedApp(param.Parameterized):
             self.selected_context = self.available_contexts[0] if self.available_contexts else None
             print(f"Available contexts after login: {self.available_contexts}")  # Debug print
             self.login_status = "Login Successful!"
+            self.show_login_panel = False
         except Exception as e:
             self.login_status = f"Invalid username or password: {e}"
 
@@ -123,7 +130,7 @@ class DataFedApp(param.Parameterized):
 
     def create_record(self, event):
         if not self.title or not file_upload_app.file_content:
-            self.record_output = "Title and metadata are required"
+            self.record_output_pane.object = pn.pane.Alert("Title and metadata are required", alert_type="danger")
             return
         try:
             if self.selected_context:
@@ -137,51 +144,51 @@ class DataFedApp(param.Parameterized):
             record_id = response[0].data[0].id
 
             res = self.to_dict(str(response[0].data[0]))
-            self.record_output = f"Record created: {res}"
+            self.record_output_pane.object = pn.pane.Alert(f"Record created: {res}", alert_type="success")
         except Exception as e:
-            self.record_output = f"Failed to create record: {e}"
+            self.record_output_pane.object = pn.pane.Alert(f"Failed to create record: {e}", alert_type="danger")
 
     def read_record(self, event):
         if not self.record_id:
-            self.record_output = "Record ID is required"
+            self.record_output_pane.object = pn.pane.Alert("Record ID is required", alert_type="warning")
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             response = self.df_api.dataView(f"d/{self.record_id}")
             res = self.to_dict(str(response[0].data[0]))
-            self.record_output = str(res)
+            self.record_output_pane.object = pn.pane.Markdown(f"**Record Data:**\n\n```json\n{json.dumps(res, indent=2)}\n```")
         except Exception as e:
-            self.record_output = f"Failed to read record: {e}"
+            self.record_output_pane.object = pn.pane.Alert(f"Failed to read record: {e}", alert_type="danger")
 
     def update_record(self, event):
         if not self.record_id or not self.update_metadata:
-            self.record_output = "Record ID and metadata are required"
+            self.record_output_pane.object = pn.pane.Alert("Record ID and metadata are required", alert_type="warning")
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             response = self.df_api.dataUpdate(f"d/{self.record_id}", metadata=self.update_metadata)
             res = self.to_dict(str(response[0].data[0]))
-            self.record_output = f"Record updated: {res}"
+            self.record_output_pane.object = pn.pane.Alert(f"Record updated: {res}", alert_type="success")
         except Exception as e:
-            self.record_output = f"Failed to update record: {e}"
+            self.record_output_pane.object = pn.pane.Alert(f"Failed to update record: {e}", alert_type="danger")
 
     def delete_record(self, event):
         if not self.record_id:
-            self.record_output = "Record ID is required"
+            self.record_output_pane.object = pn.pane.Alert("Record ID is required", alert_type="warning")
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             self.df_api.dataDelete(f"d/{self.record_id}")
-            self.record_output = "Record successfully deleted"
+            self.record_output_pane.object = pn.pane.Alert("Record successfully deleted", alert_type="success")
         except Exception as e:
-            self.record_output = f"Failed to delete record: {e}"
+            self.record_output_pane.object = pn.pane.Alert(f"Failed to delete record: {e}", alert_type="danger")
 
     def transfer_data(self, event):
         if not self.source_id or not self.dest_collection:
-            self.record_output = "Source ID and destination collection are required"
+            self.record_output_pane.object = pn.pane.Alert("Source ID and destination collection are required", alert_type="warning")
             return
         try:
             if self.selected_context:
@@ -195,9 +202,9 @@ class DataFedApp(param.Parameterized):
             )
             new_record_id = new_record[0].data[0].id
             self.df_api.dataMove(f"d/{self.source_id}", new_record_id)
-            self.record_output = f"Data transferred to new record ID: {new_record_id}"
+            self.record_output_pane.object = pn.pane.Alert(f"Data transferred to new record ID: {new_record_id}", alert_type="success")
         except Exception as e:
-            self.record_output = f"Failed to transfer data: {e}"
+            self.record_output_pane.object = pn.pane.Alert(f"Failed to transfer data: {e}", alert_type="danger")
 
     def get_projects(self, event):
         try:
@@ -238,6 +245,8 @@ header = pn.Row(
     pn.pane.Markdown("**User:**"),
     pn.bind(lambda current_user: pn.pane.Markdown(f"**{current_user}**"), app.param.current_user),
     pn.layout.Spacer(width=20),
+    app.login_button,
+    pn.layout.Spacer(width=20),
     pn.pane.Markdown("**Context:**"),
     pn.bind(lambda current_context: pn.pane.Markdown(f"**{current_context}**"), app.param.current_context),
     pn.layout.Spacer(width=20),
@@ -248,7 +257,7 @@ header = pn.Row(
 login_pane = pn.Column(
     pn.Param(app.param.username),
     pn.Param(app.param.password, widgets={'password': pn.widgets.PasswordInput}),
-    app.login_button,
+    pn.widgets.Button(name='Submit Login', button_type='primary', on_click=app.check_login),
     pn.Param(app.param.login_status)
 )
 
@@ -257,16 +266,14 @@ record_pane = pn.Column(
     pn.Param(app.param.selected_collection, widgets={'selected_collection': pn.widgets.Select}),
     pn.Tabs(
         ("Create Record", pn.Column(
-            pn.Param(app.param.title), 
-            file_upload_app_view,
-            app.metadata_json_pane,
+            pn.Row(pn.Param(app.param.title), file_upload_app_view, app.metadata_json_pane),
             app.create_button, 
-            pn.Param(app.param.record_output)
+            app.record_output_pane
         )),
-        ("Read Record", pn.Column(pn.Param(app.param.record_id), app.read_button, pn.Param(app.param.record_output))),
-        ("Update Record", pn.Column(pn.Param(app.param.record_id), pn.Param(app.param.update_metadata, widgets={'update_metadata': pn.widgets.TextAreaInput}), app.update_button, pn.Param(app.param.record_output))),
-        ("Delete Record", pn.Column(pn.Param(app.param.record_id), app.delete_button, pn.Param(app.param.record_output))),
-        ("Transfer Data", pn.Column(pn.Param(app.param.source_id), pn.Param(app.param.dest_collection), app.transfer_button, pn.Param(app.param.record_output))),
+        ("Read Record", pn.Column(pn.Param(app.param.record_id), app.read_button, app.record_output_pane)),
+        ("Update Record", pn.Column(pn.Param(app.param.record_id), pn.Param(app.param.update_metadata, widgets={'update_metadata': pn.widgets.TextAreaInput}), app.update_button, app.record_output_pane)),
+        ("Delete Record", pn.Column(pn.Param(app.param.record_id), app.delete_button, app.record_output_pane)),
+        ("Transfer Data", pn.Column(pn.Param(app.param.source_id), pn.Param(app.param.dest_collection), app.transfer_button, app.record_output_pane)),
     )
 )
 
@@ -275,13 +282,21 @@ projects_pane = pn.Column(
     app.projects_json_pane,
 )
 
-main_pane = pn.Column(
-    header,
+# Use MaterialTemplate for the layout
+template = pn.template.MaterialTemplate(title='DataFed Management')
+
+# Add content to the template
+template.header.append(header)
+template.main.append(
     pn.Tabs(
-        ("Login", login_pane),
         ("Manage Records", record_pane),
         ("View Projects", projects_pane)
     )
 )
 
-main_pane.servable()
+# Conditionally show the login pane as a modal
+template.modal.append(pn.bind(lambda show: login_pane if show else None, app.param.show_login_panel))
+
+pn.state.onload(lambda: app.toggle_login_panel(None))  # Ensure modal can be triggered
+
+template.servable()

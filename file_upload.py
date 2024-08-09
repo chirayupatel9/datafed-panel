@@ -2,31 +2,41 @@ import panel as pn
 import param
 import json
 
-pn.extension()
+pn.extension('material')
 
 class FileUploadApp(param.Parameterized):
-    file_input = param.ClassSelector(class_=pn.widgets.FileInput, default=pn.widgets.FileInput(accept='.json'))
-    file_content = param.String(default="", label="File Content")
+    file_input = param.ClassSelector(class_=pn.widgets.FileInput)
+    file_content = param.String(default="", doc="Contents of the uploaded file")
 
     def __init__(self, **params):
         super().__init__(**params)
-        self.file_input.param.watch(self._file_input_handler, 'value')
+        self.file_input = pn.widgets.FileInput(
+            accept='.json',
+            multiple=False,
+            css_classes=['material-input'],
+            width=400,  # Adjusted width
+            height=200  # Adjusted height
+        )
+        self.file_input.param.watch(self._handle_file_upload, 'value')
 
-    def _file_input_handler(self, event):
-        if event.new:
-            file_content = event.new
+    def _handle_file_upload(self, event):
+        if self.file_input.value is not None:
+            file_bytes = self.file_input.value
             try:
-                file_json = json.loads(file_content.decode('utf-8'))
-                self.file_content = json.dumps(file_json, indent=2)
-            except json.JSONDecodeError:
-                self.file_content = "Invalid JSON file"
+                file_content = file_bytes.decode('utf-8')
+                self.file_content = file_content
+            except Exception as e:
+                self.file_content = f"Error decoding file: {e}"
 
     def view(self):
-        return pn.Column(
-            pn.pane.Markdown("### Drag and Drop JSON File Upload"),
+        return pn.Card(
+            pn.pane.HTML("<h2 style='text-align: center;'>Drag and Drop your JSON file here</h2>"),
             self.file_input,
-            pn.pane.Markdown("### File Content Preview"),
-            # pn.pane.JSON(self.file_content, depth=3, width=600, height=400)
+            title="File Upload",
+            css_classes=['material-card'],
+            margin=(20, 20),
+            width=450,  # Adjusted width to match content
+            height=300  # Adjusted height to provide enough space
         )
 
 file_upload_app = FileUploadApp()
