@@ -5,6 +5,7 @@ from datafed.CommandLib import API
 from file_upload import file_upload_app, file_upload_app_view
 
 pn.extension('material')
+# pn.config.theme = 'dark'
 
 class DataFedApp(param.Parameterized):
     df_api = param.ClassSelector(class_=API, default=None)
@@ -28,16 +29,16 @@ class DataFedApp(param.Parameterized):
 
     current_user = param.String(default="Not Logged In", label="Current User")
     current_context = param.String(default="No Context", label="Current Context")
-    available_contexts = param.List(default=[], label="Available Contexts")
-
-    selected_context = param.Selector(objects=[], label="Select Context")
-    available_collections = param.List(default=[], label="Available Collections")
-    selected_collection = param.Selector(objects=[], label="Select Collection")
+    
+    selected_context = param.Selector(objects={}, label="Select Context")
+    available_contexts = param.Dict(default={}, label="Available Contexts")
+    selected_collection = param.Selector(objects={}, label="Select Collection")
+    available_collections = param.Dict(default={}, label="Available Collections")
 
     show_login_panel = param.Boolean(default=False)
 
     def __init__(self, **params):
-        params['df_api'] = API()  # Initialize df_api here to avoid pickling issues
+        params['df_api'] = API() 
         super().__init__(**params)
         self.login_button = pn.widgets.Button(name='Login', button_type='primary')
         self.login_button.on_click(self.toggle_login_panel)
@@ -67,13 +68,12 @@ class DataFedApp(param.Parameterized):
         self.metadata_json_pane = pn.pane.JSON(object=None, name='Metadata', depth=3, width=600, height=400)
         self.record_output_pane = pn.pane.Markdown("**No output yet**", name='Record Output', width=600)
 
-        # Watch for changes in file content from FileUploadApp
         file_upload_app.param.watch(self.update_metadata_from_file_upload, 'file_content')
 
         self.param.watch(self.update_collections, 'selected_context')
 
-    def toggle_login_panel(self, event):
-        self.show_login_panel = True  # Set to True to open the login panel
+    def toggle_login_panel(self, event=None):
+        self.show_login_panel = not self.show_login_panel  
 
     def check_login(self, event):
         try:
@@ -84,10 +84,10 @@ class DataFedApp(param.Parameterized):
             else:
                 self.current_user = str(user_info)
             self.current_context = self.df_api.getContext()
-            self.available_contexts = self.get_available_contexts()
+            ids, titles = self.get_available_contexts()
+            self.available_contexts = {title: id_ for id_, title in zip(ids, titles)}
             self.param['selected_context'].objects = self.available_contexts
-            self.selected_context = self.available_contexts[0] if self.available_contexts else None
-            print(f"Available contexts after login: {self.available_contexts}")  # Debug print
+            self.selected_context = ids[0] if ids else None
             self.login_status = "Login Successful!"
             self.show_login_panel = False
         except Exception as e:
@@ -102,93 +102,100 @@ class DataFedApp(param.Parameterized):
         self.password = ""
 
     def update_collections(self, event):
-        if self.selected_context:
-            collections = self.get_collections_in_context(self.selected_context)
+        context_id = self.selected_context
+ 
+        if context_id:
+            collections = self.get_collections_in_context(context_id)
+            print(f'collectionssss: {collections}')
+            self.available_collections = collections
             self.param['selected_collection'].objects = collections
+            # print(f'collections : {collections[0]}')
             if collections:
-                self.selected_collection = collections[0]
-            print(f"Available collections for {self.selected_context}: {collections}")  # Debug print
-
+                self.selected_collection = next(iter(collections))
     def get_collections_in_context(self, context):
         try:
             self.df_api.setContext(context)
-            response = self.df_api.collectionView('root', context=context)
-            print(f"Root collection details: {response}")  # Debug print
             items_list = self.df_api.collectionItemsList('root', context=context)
-            collections = [item.id for item in items_list[0].item]
-            print(f'collections: {collections}')
+            collections = {item.title: item.id for item in items_list[0].item if item.id.startswith("c/")}
             return collections
         except Exception as e:
             return [f"Error: {e}"]
 
     def update_metadata_from_file_upload(self, event):
         try:
-            file_content = json.loads(event.new)
-            self.metadata_json_pane.object = file_content
-        except json.JSONDecodeError:
-            self.metadata_json_pane.object = "Invalid JSON file"
+            if event.new:
+                file_content = json.loads(event.new)
+                self.metadata_json_pane.object = file_content
+            else:
+                self.metadata_json_pane.object = "No file uploaded or file is empty"
+        except json.JSONDecodeError as e:
+            self.metadata_json_pane.object = f"Invalid JSON file: {e}"
+        except Exception as e:
+            self.metadata_json_pane.object = f"Error processing file: {e}"
 
     def create_record(self, event):
+        print(f'file content : {file_upload_app.file_content}')
+        print(f'self.selected_collection:{self.selected_collection}')
+        print(f'self.available_collections[self.selected_collection] :{self.available_collections[self.selected_collection] }')
         if not self.title or not file_upload_app.file_content:
-            self.record_output_pane.object = pn.pane.Alert("Title and metadata are required", alert_type="danger")
+            self.record_output_pane.object = "**Error:** Title and metadata are required"
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
-            # Create record without raw data file
             response = self.df_api.dataCreate(
                 title=self.title,
                 metadata=file_upload_app.file_content,
-                parent_id=self.selected_collection
+                parent_id=self.available_collections[self.selected_collection] 
             )
             record_id = response[0].data[0].id
 
             res = self.to_dict(str(response[0].data[0]))
-            self.record_output_pane.object = pn.pane.Alert(f"Record created: {res}", alert_type="success")
+            self.record_output_pane.object = f"**Success:** Record created with ID {record_id}"
         except Exception as e:
-            self.record_output_pane.object = pn.pane.Alert(f"Failed to create record: {e}", alert_type="danger")
+            self.record_output_pane.object = f"**Error:** Failed to create record: {e}"
 
     def read_record(self, event):
         if not self.record_id:
-            self.record_output_pane.object = pn.pane.Alert("Record ID is required", alert_type="warning")
+            self.record_output_pane.object = "**Warning:** Record ID is required"
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             response = self.df_api.dataView(f"d/{self.record_id}")
             res = self.to_dict(str(response[0].data[0]))
-            self.record_output_pane.object = pn.pane.Markdown(f"**Record Data:**\n\n```json\n{json.dumps(res, indent=2)}\n```")
+            self.record_output_pane.object = f"**Record Data:**\n\n```json\n{json.dumps(res, indent=2)}\n```"
         except Exception as e:
-            self.record_output_pane.object = pn.pane.Alert(f"Failed to read record: {e}", alert_type="danger")
+            self.record_output_pane.object = f"**Error:** Failed to read record: {e}"
 
     def update_record(self, event):
         if not self.record_id or not self.update_metadata:
-            self.record_output_pane.object = pn.pane.Alert("Record ID and metadata are required", alert_type="warning")
+            self.record_output_pane.object = "**Warning:** Record ID and metadata are required"
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             response = self.df_api.dataUpdate(f"d/{self.record_id}", metadata=self.update_metadata)
             res = self.to_dict(str(response[0].data[0]))
-            self.record_output_pane.object = pn.pane.Alert(f"Record updated: {res}", alert_type="success")
+            self.record_output_pane.object = f"**Success:** Record updated with new metadata"
         except Exception as e:
-            self.record_output_pane.object = pn.pane.Alert(f"Failed to update record: {e}", alert_type="danger")
+            self.record_output_pane.object = f"**Error:** Failed to update record: {e}"
 
     def delete_record(self, event):
         if not self.record_id:
-            self.record_output_pane.object = pn.pane.Alert("Record ID is required", alert_type="warning")
+            self.record_output_pane.object = "**Warning:** Record ID is required"
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             self.df_api.dataDelete(f"d/{self.record_id}")
-            self.record_output_pane.object = pn.pane.Alert("Record successfully deleted", alert_type="success")
+            self.record_output_pane.object = "**Success:** Record successfully deleted"
         except Exception as e:
-            self.record_output_pane.object = pn.pane.Alert(f"Failed to delete record: {e}", alert_type="danger")
+            self.record_output_pane.object = f"**Error:** Failed to delete record: {e}"
 
     def transfer_data(self, event):
         if not self.source_id or not self.dest_collection:
-            self.record_output_pane.object = pn.pane.Alert("Source ID and destination collection are required", alert_type="warning")
+            self.record_output_pane.object = "**Warning:** Source ID and destination collection are required"
             return
         try:
             if self.selected_context:
@@ -202,13 +209,14 @@ class DataFedApp(param.Parameterized):
             )
             new_record_id = new_record[0].data[0].id
             self.df_api.dataMove(f"d/{self.source_id}", new_record_id)
-            self.record_output_pane.object = pn.pane.Alert(f"Data transferred to new record ID: {new_record_id}", alert_type="success")
+            self.record_output_pane.object = f"**Success:** Data transferred to new record ID: {new_record_id}"
         except Exception as e:
-            self.record_output_pane.object = pn.pane.Alert(f"Failed to transfer data: {e}", alert_type="danger")
+            self.record_output_pane.object = f"**Error:** Failed to transfer data: {e}"
 
     def get_projects(self, event):
         try:
             response = self.df_api.projectList()
+            # print(f'projects :{response}')
             projects = response[0].item
             projects_list = [{"id": project.id, "title": project.title} for project in projects]
             self.projects_json_pane.object = projects_list
@@ -219,7 +227,7 @@ class DataFedApp(param.Parameterized):
         try:
             response = self.df_api.projectList()
             projects = response[0].item
-            return [project.id for project in projects]
+            return [project.id for project in projects],[project.title for project in projects]
         except Exception as e:
             return [f"Error: {e}"]
 
@@ -289,6 +297,7 @@ template = pn.template.MaterialTemplate(title='DataFed Management')
 template.header.append(header)
 template.main.append(
     pn.Tabs(
+        ("Login", login_pane),
         ("Manage Records", record_pane),
         ("View Projects", projects_pane)
     )

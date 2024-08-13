@@ -21,6 +21,7 @@ class FileUploadApp(param.Parameterized):
 
     def _handle_file_upload(self, event):
         if self.file_input.value is not None:
+            print(f"self.file_input:{self.file_input,self.file_input.value}")
             file_bytes = self.file_input.value
             try:
                 file_content = file_bytes.decode('utf-8')
