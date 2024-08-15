@@ -21,7 +21,7 @@ class FileUploadApp(param.Parameterized):
 
     def _handle_file_upload(self, event):
         if self.file_input.value is not None:
-            print(f"self.file_input:{self.file_input,self.file_input.value}")
+            print(f'File:{self.file_input.value}')
             file_bytes = self.file_input.value
             try:
                 file_content = file_bytes.decode('utf-8')
@@ -30,14 +30,26 @@ class FileUploadApp(param.Parameterized):
                 self.file_content = f"Error decoding file: {e}"
 
     def view(self):
+        # HTML and the hidden file input
+        drag_drop_area = pn.pane.HTML(
+            """
+            <div class="drop-zone">
+                <h2 style="text-align: center;">Drag and Drop your JSON file here or click to upload</h2>
+            </div>
+            """,
+            height=200,
+            sizing_mode="stretch_width"
+        )
+
+        # Combine drag and drop area with hidden file input
         return pn.Card(
-            pn.pane.HTML("<h2 style='text-align: center;'>Drag and Drop your JSON file here</h2>"),
+            drag_drop_area,
             self.file_input,
             title="File Upload",
             css_classes=['material-card'],
             margin=(20, 20),
-            width=450,  # Adjusted width to match content
-            height=300  # Adjusted height to provide enough space
+            width=450,
+            height=300
         )
 
 file_upload_app = FileUploadApp()

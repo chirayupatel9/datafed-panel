@@ -71,6 +71,25 @@ class DataFedApp(param.Parameterized):
         file_upload_app.param.watch(self.update_metadata_from_file_upload, 'file_content')
 
         self.param.watch(self.update_collections, 'selected_context')
+        pn.state.onload(self.initial_login_check)
+
+    def initial_login_check(self):
+        try:
+            user_info = self.df_api.getAuthUser()
+            print('afdsadad',user_info)
+            if user_info:
+                self.current_user = user_info
+                self.current_context = self.df_api.getContext()
+                ids, titles = self.get_available_contexts()
+                self.available_contexts = {title: id_ for id_, title in zip(ids, titles)}
+                self.param['selected_context'].objects = self.available_contexts
+                self.selected_context = ids[0] if ids else None
+                self.login_status = "User in session!"
+            else:
+                self.current_user = "Not Logged In"
+                self.current_context = "No Context"
+        except Exception as e:
+            self.login_status = f"Error: {e}"
 
     def toggle_login_panel(self, event=None):
         self.show_login_panel = not self.show_login_panel  
@@ -79,7 +98,10 @@ class DataFedApp(param.Parameterized):
         try:
             self.df_api.loginByPassword(self.username, self.password)
             user_info = self.df_api.getAuthUser()
+            print(f'user"{user_info}')
+            print(f'user"{user_info}')
             if hasattr(user_info, 'username'):
+                print("true")
                 self.current_user = user_info.username
             else:
                 self.current_user = str(user_info)
@@ -134,9 +156,6 @@ class DataFedApp(param.Parameterized):
             self.metadata_json_pane.object = f"Error processing file: {e}"
 
     def create_record(self, event):
-        print(f'file content : {file_upload_app.file_content}')
-        print(f'self.selected_collection:{self.selected_collection}')
-        print(f'self.available_collections[self.selected_collection] :{self.available_collections[self.selected_collection] }')
         if not self.title or not file_upload_app.file_content:
             self.record_output_pane.object = "**Error:** Title and metadata are required"
             return
