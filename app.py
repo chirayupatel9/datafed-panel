@@ -131,7 +131,6 @@ class DataFedApp(param.Parameterized):
             print(f'collectionssss: {collections}')
             self.available_collections = collections
             self.param['selected_collection'].objects = collections
-            # print(f'collections : {collections[0]}')
             if collections:
                 self.selected_collection = next(iter(collections))
     def get_collections_in_context(self, context):
@@ -144,18 +143,23 @@ class DataFedApp(param.Parameterized):
             return [f"Error: {e}"]
 
     def update_metadata_from_file_upload(self, event):
+        print(f"Event triggered: {event}")
         try:
             if event.new:
                 file_content = json.loads(event.new)
+                print(f"Loaded JSON content: {file_content}")
                 self.metadata_json_pane.object = file_content
             else:
                 self.metadata_json_pane.object = "No file uploaded or file is empty"
         except json.JSONDecodeError as e:
             self.metadata_json_pane.object = f"Invalid JSON file: {e}"
+            print(f"JSON decode error: {e}")
         except Exception as e:
             self.metadata_json_pane.object = f"Error processing file: {e}"
+            print(f"Error processing file: {e}")
 
     def create_record(self, event):
+        print(f"file_upload_app.file_content:{file_upload_app.file_content}")
         if not self.title or not file_upload_app.file_content:
             self.record_output_pane.object = "**Error:** Title and metadata are required"
             return

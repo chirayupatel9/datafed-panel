@@ -20,8 +20,8 @@ class FileUploadApp(param.Parameterized):
         self.file_input.param.watch(self._handle_file_upload, 'value')
 
     def _handle_file_upload(self, event):
+        print(f'file :{self.file_input}')
         if self.file_input.value is not None:
-            print(f'File:{self.file_input.value}')
             file_bytes = self.file_input.value
             try:
                 file_content = file_bytes.decode('utf-8')
@@ -33,7 +33,7 @@ class FileUploadApp(param.Parameterized):
         # HTML and the hidden file input
         drag_drop_area = pn.pane.HTML(
             """
-            <div class="drop-zone">
+            <div    >
                 <h2 style="text-align: center;">Drag and Drop your JSON file here or click to upload</h2>
             </div>
             """,
