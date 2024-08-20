@@ -11,11 +11,11 @@ COPY . /app
 RUN pip install --upgrade pip
 RUN pip install panel param
 
-# Make port 8501 available to the world outside this container
-EXPOSE 8501
+# Make port 5006 available to the world outside this container
+EXPOSE 5006
 
 # Define environment variable
 ENV NAME FileSelectorApp
 
 # Run the file selector application
-CMD ["panel", "serve", "filebrowser.py", "--address", "0.0.0.0", "--port", "8501"]
+CMD ["panel", "serve", "app.py", "--address", "0.0.0.0", "--port", "5006"]
