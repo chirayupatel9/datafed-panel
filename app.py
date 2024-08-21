@@ -78,12 +78,10 @@ class FileSelector(CompositeWidget):
         if self.refresh_period:
             self._periodic.start()
 
-        # Remove _json_viewer and replace with metadata_json_pane
         self._message = pn.pane.Markdown("Please select a JSON file", width_policy='max', height_policy='max')
         self._selected_file_display = pn.pane.Markdown("", width_policy='max', height_policy='max')
-        self._output = pn.Column(self._selected_file_display,"<br>", self._message)
+        self._output = pn.Column(self._selected_file_display, self._message)
 
-        # Modify layout to include just the metadata_json_pane or message
         self._composite.append(self._output)
 
     def _select_and_go(self, event):
@@ -226,8 +224,8 @@ class FileSelector(CompositeWidget):
     def _update_output(self, selected_files):
         if not selected_files:
             self._selected_file_display.object = ""
-            self._output[1:] = [self._message]
-            return
+            self._output[1:] = [self._message]  # Ensures only one item is assigned
+            return None
 
         selected_file = selected_files[0]
         self._selected_file_display.object = f"**Selected File:** {selected_file}"
@@ -235,11 +233,14 @@ class FileSelector(CompositeWidget):
         if selected_file.endswith('.json'):
             with open(selected_file, 'r') as f:
                 json_data = json.load(f)
-            self._output[1:] = [self._selected_file_display, self._message]
-            self.metadata_json_pane.object = json_data  # Update the metadata_json_pane
-            self._output[1:] = [self.metadata_json_pane]
+            # Update the Column to display the selected file and JSON viewer
+            self._output[:] = [self._selected_file_display]  # Replace with selected file display
+            return json_data  # Return JSON data for processing in DataFedApp
         else:
-            self._output[1:] = [self._selected_file_display, self._message]
+            # Show message if the selected file is not a JSON
+            self._output[:] = [self._selected_file_display, self._message]  # Replace with message
+            return None
+
 
     def _scan_path(self, path, file_pattern):
         paths = [os.path.join(path, p) for p in os.listdir(path)]
@@ -391,11 +392,9 @@ class DataFedApp(param.Parameterized):
 
     def update_metadata_from_file_selector(self, event):
         try:
-            selected_file = event.new[0]
-            if selected_file.endswith('.json'):
-                with open(selected_file, 'r') as f:
-                    file_content = json.load(f)
-                self.metadata_json_pane.object = file_content
+            json_data = self.file_selector._update_output(self.file_selector.value)
+            if json_data:
+                self.metadata_json_pane.object = json_data
             else:
                 self.metadata_json_pane.object = "Please select a JSON file."
         except json.JSONDecodeError as e:
@@ -404,7 +403,7 @@ class DataFedApp(param.Parameterized):
             self.metadata_json_pane.object = f"Error processing file: {e}"
 
     def create_record(self, event):
-        if not self.title or not self.file_selector.value:
+        if not self.title or not self.metadata_json_pane.object:
             self.record_output_pane.object = "**Error:** Title and metadata are required"
             return
         try:
