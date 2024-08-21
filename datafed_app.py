@@ -65,7 +65,7 @@ class DataFedApp(param.Parameterized):
         self.logout_button.on_click(self.logout)
 
         self.projects_json_pane = pn.pane.JSON(object=None, name='Projects Output', depth=3, width=600, height=400)
-        self.metadata_json_pane = pn.pane.JSON(object=None, name='Metadata', depth=3, width=600, height=400)
+        self.metadata_json_editor = pn.widgets.JSONEditor(name='Metadata', width=600)
         self.record_output_pane = pn.pane.Markdown("<h3>Status Empty</h3>", name='Status', width=600)
 
         # Replace FileUploadApp with FileSelector
@@ -145,13 +145,14 @@ class DataFedApp(param.Parameterized):
         try:
             json_data = self.file_selector._update_output(self.file_selector.value)
             if json_data:
-                self.metadata_json_pane.object = json_data
+                self.metadata_json_editor.value = json_data  # Use 'value' to set JSON data
             else:
-                self.metadata_json_pane.object = "Please select a JSON file."
+                self.metadata_json_editor.value = {}
         except json.JSONDecodeError as e:
-            self.metadata_json_pane.object = f"Invalid JSON file: {e}"
+            self.metadata_json_editor.value = {"error": f"Invalid JSON file: {e}"}
         except Exception as e:
-            self.metadata_json_pane.object = f"Error processing file: {e}"
+            self.metadata_json_editor.value = {"error": f"Error processing file: {e}"}
+
 
     def create_record(self, event):
         if not self.title or not self.metadata_json_pane.object:
