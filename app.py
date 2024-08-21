@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import json
+from typing import ClassVar
 import param
 import panel as pn
 from datafed.CommandLib import API
