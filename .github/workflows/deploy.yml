@@ -40,7 +40,7 @@ jobs:
 
       - name: Deploy to EC2
         run: |
-          ssh -o StrictHostKeyChecking=no ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          sudo ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
             docker pull  ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest
             docker stop fileselectorapp || true
             docker rm fileselectorapp || true
