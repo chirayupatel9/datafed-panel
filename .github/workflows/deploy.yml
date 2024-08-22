@@ -37,12 +37,12 @@ jobs:
         uses: webfactory/ssh-agent@v0.5.3
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
+  
       - name: Deploy to EC2
         run: |
           sudo ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            docker pull  ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest
-            docker stop fileselectorapp || true
-            docker rm fileselectorapp || true
-            docker run -d -p 5006:5006 --name fileselectorapp  ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest
+            sudo docker pull ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest
+            sudo docker stop fileselectorapp || true
+            sudo docker rm fileselectorapp || true
+            sudo docker run -d -p 5006:5006 --name fileselectorapp ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest
           EOF
