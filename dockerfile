@@ -9,7 +9,7 @@ COPY . /app
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --upgrade pip
-RUN pip install panel param
+RUN pip install -r requirements.txt
 
 # Make port 5006 available to the world outside this container
 EXPOSE 5006
