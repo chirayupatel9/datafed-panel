@@ -36,4 +36,4 @@ jobs:
             docker stop Datafed_personal || true
             docker rm Datafed_personal || true
             docker pull ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest  
-            docker run -d --name Datafed_personal -p 80:80 ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest  
+            docker run -d --name Datafed_personal -p 5006:5006 ${{ secrets.DOCKER_USERNAME }}/fileselectorapp:latest  
