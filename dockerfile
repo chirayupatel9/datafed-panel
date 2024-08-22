@@ -21,4 +21,6 @@ ENV NAME FileSelectorApp
 ENV BOKEH_ALLOW_WS_ORIGIN=34.238.220.120:5006
 
 # Run the file selector application
+
 CMD ["panel", "serve", "app.py", "--address", "0.0.0.0", "--port", "5006", "--allow-websocket-origin=0.0.0.0:5006"]
+
