@@ -4,8 +4,11 @@ import param
 import panel as pn
 from datafed.CommandLib import API
 from file_selector import FileSelector  # Import the FileSelector
+import time
+from google.protobuf.json_format import MessageToJson
 
 pn.extension('material')
+pn.extension('jsoneditor')
 
 class DataFedApp(param.Parameterized):
     df_api = param.ClassSelector(class_=API, default=None)
@@ -16,8 +19,10 @@ class DataFedApp(param.Parameterized):
     title = param.String(default="", label="Title")
     metadata = param.String(default="", label="Metadata (JSON format)")
 
-    record_id = param.String(default="", label="Record ID")
+    record_id = param.Selector(default=None, objects={}, label="Select Record")
     update_metadata = param.String(default="", label="Update Metadata (JSON format)")
+    metadata_changed = param.Boolean(default=False, label="Metadata Changed")  # Track changes
+    show_update_button = param.Boolean(default=False, label="Show Update Button")  # Control visibility
 
     source_id = param.String(default="", label="Source ID")
     dest_collection = param.String(default="", label="Destination Collection")
@@ -30,7 +35,7 @@ class DataFedApp(param.Parameterized):
     current_user = param.String(default="Not Logged In", label="Current User")
     current_context = param.String(default="No Context", label="Current Context")
     
-    selected_context = param.Selector(default='root',objects={}, label="Select Context")
+    selected_context = param.Selector(default='root', objects={}, label="Select Context")
     available_contexts = param.Dict(default={}, label="Available Contexts")
     selected_collection = param.Selector(objects={}, label="Select Collection")
     available_collections = param.Dict(default={}, label="Available Collections")
@@ -51,6 +56,7 @@ class DataFedApp(param.Parameterized):
         
         self.update_button = pn.widgets.Button(name='Update Record', button_type='primary')
         self.update_button.on_click(self.update_record)
+        self.update_button.visible = False  # Initially hidden
         
         self.delete_button = pn.widgets.Button(name='Delete Record', button_type='danger')
         self.delete_button.on_click(self.delete_record)
@@ -73,6 +79,9 @@ class DataFedApp(param.Parameterized):
         self.file_selector.param.watch(self.update_metadata_from_file_selector, 'value')
 
         self.param.watch(self.update_collections, 'selected_context')
+        self.metadata_json_editor.param.watch(self.on_metadata_change, 'value')  # Watch for changes in JSONEditor
+        self.param.watch(self.toggle_update_button_visibility, 'metadata_changed')  # Watch for changes in the change flag
+
         pn.state.onload(self.initial_login_check)
 
     def initial_login_check(self):
@@ -110,6 +119,7 @@ class DataFedApp(param.Parameterized):
             self.selected_context = ids[0] if ids else None
             self.record_output_pane.object = "<h3>Login Successful!</h3>"
             self.show_login_panel = False
+            self.update_records()  # Update records list after login
         except Exception as e:
             self.record_output_pane.object = f"<h3>Invalid username or password: {e}</h3>"
 
@@ -130,6 +140,7 @@ class DataFedApp(param.Parameterized):
             self.param['selected_collection'].objects = collections
             if collections:
                 self.selected_collection = next(iter(collections))
+            self.update_records()  # Update records list after changing collection
 
     def get_collections_in_context(self, context):
         try:
@@ -153,65 +164,109 @@ class DataFedApp(param.Parameterized):
         except Exception as e:
             self.metadata_json_editor.value = {"error": f"Error processing file: {e}"}
 
-
     def create_record(self, event):
-        if not self.title or not self.metadata_json_pane.object:
-            self.record_output_pane.object = "<h3>**Error:** Title and metadata are required</h3>"
+        if not self.title or not self.metadata_json_editor.value:
+            self.record_output_pane.object = "<h3>Error: Title and metadata are required</h3>"
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             response = self.df_api.dataCreate(
                 title=self.title,
-                metadata=json.dumps(self.metadata_json_pane.object),
+                metadata=json.dumps(self.metadata_json_editor.value),
                 parent_id=self.available_collections[self.selected_collection] 
             )
             record_id = response[0].data[0].id
-            self.record_output_pane.object = f"<h3>**Success:** Record created with ID {record_id}</h3>"
+            self.record_output_pane.object = f"<h3>Success: Record created with ID {record_id}</h3>"
+            self.update_records()  # Refresh the records list after creating a new record
         except Exception as e:
-            self.record_output_pane.object = f"<h3>**Error:** Failed to create record: {e}</h3>"
+            self.record_output_pane.object = f"<h3>Error: Failed to create record: {e}</h3>"
+
+    def update_records(self):
+        """Fetches all records in the selected collection and updates the record_id dropdown."""
+        try:
+            if not self.available_collections[self.selected_collection]:
+                self.record_output_pane.object = "<h3>Warning: Context or Collection not selected</h3>"
+                return
+            
+            # Fetching records
+            items_list = self.df_api.collectionItemsList(coll_id=self.available_collections[self.selected_collection], context=self.selected_context)
+            
+            records = {item.title: item.id for item in items_list[0].item if item.id.startswith("d/")}
+            
+            # Update the record_id dropdown
+            self.param['record_id'].objects = records
+            if records:
+                self.record_id = next(iter(records))  # Automatically select the first record
+            else:
+                self.record_id = None
+                self.record_output_pane.object = "<h3>No records found in the selected collection</h3>"
+        
+        except Exception as e:
+            self.record_output_pane.object = f"<h3>Error: Failed to fetch records: {e}</h3>"
+
+    def on_metadata_change(self, event):
+        """Callback to handle changes in the JSON editor."""
+        self.metadata_changed = True
+
+    def toggle_update_button_visibility(self, event):
+        """Toggle the visibility of the update button based on metadata changes."""
+        self.update_button.visible = self.metadata_changed
 
     def read_record(self, event):
         if not self.record_id:
-            self.record_output_pane.object = "<h3>**Warning:** Record ID is required</h3>"
+            self.record_output_pane.object = "<h3>Warning: Record ID is required</h3>"
             return
-        try:
+        try:            
             if self.selected_context:
-                self.df_api.setContext(self.selected_context)
-            response = self.df_api.dataView(f"d/{self.record_id}")
-            res = self.to_dict(str(response[0].data[0]))
-            self.record_output_pane.object = f"<h3>**Record Data:**\n\n```json\n{json.dumps(res, indent=2)}\n```</h3>"
-        except Exception as e:
-            self.record_output_pane.object = f"<h3>**Error:** Failed to read record: {e}</h3>"
+                response = self.df_api.dataView(data_id=self.record_id, context=self.selected_context)
+                res = MessageToJson(response[0])
+                res_json = json.loads(res)
 
-    def update_record(self, event):
-        if not self.record_id or not self.update_metadata:
-            self.record_output_pane.object = "<h3>**Warning:** Record ID and metadata are required</h3>"
+                for record in res_json.get('data', []):
+                    if 'metadata' in record:
+                        try:
+                            record['metadata'] = json.loads(record['metadata'])
+                        except json.JSONDecodeError:
+                            pass
+
+                self.metadata_json_editor.value = res_json
+                self.metadata_changed = False  # Reset the change flag after loading
+
+                self.record_output_pane.object = f"<h3>Record Data</h3>"
+        except Exception as e:
+            self.record_output_pane.object = f"<h3>Error: Failed to read record: {e}</h3>"
+
+    def update_record(self, event=None):
+        if not self.record_id or not self.metadata_json_editor.value:
+            self.record_output_pane.object = "<h3>Warning: Record ID and metadata are required</h3>"
             return
         try:
-            if self.selected_context:
+            if self.selected_context and self.metadata_changed:
                 self.df_api.setContext(self.selected_context)
-            response = self.df_api.dataUpdate(f"d/{self.record_id}", metadata=self.update_metadata)
-            res = self.to_dict(str(response[0].data[0]))
-            self.record_output_pane.object = f"<h3>**Success:** Record updated with new metadata</h3>"
+                updated_metadata = json.dumps(self.metadata_json_editor.value['data'][0]['metadata'])
+                response = self.df_api.dataUpdate(data_id=self.record_id, metadata=updated_metadata)
+                self.record_output_pane.object = f"<h3>Success: Record updated with new metadata</h3>"
+                self.metadata_changed = False  # Reset the change flag after updating
         except Exception as e:
-            self.record_output_pane.object = f"<h3>**Error:** Failed to update record: {e}</h3>"
+            self.record_output_pane.object = f"<h3>Error: Failed to update record: {e}</h3>"
 
     def delete_record(self, event):
         if not self.record_id:
-            self.record_output_pane.object = "<h3>**Warning:** Record ID is required</h3>"
+            self.record_output_pane.object = "<h3>Warning: Record ID is required</h3>"
             return
         try:
             if self.selected_context:
                 self.df_api.setContext(self.selected_context)
             self.df_api.dataDelete(f"d/{self.record_id}")
-            self.record_output_pane.object = "<h3>**Success:** Record successfully deleted</h3>"
+            self.record_output_pane.object = "<h3>Success: Record successfully deleted</h3>"
+            self.update_records()  # Refresh the records list after deleting a record
         except Exception as e:
-            self.record_output_pane.object = f"<h3>**Error:** Failed to delete record: {e}</h3>"
+            self.record_output_pane.object = f"<h3>Error: Failed to delete record: {e}</h3>"
 
     def transfer_data(self, event):
         if not self.source_id or not self.dest_collection:
-            self.record_output_pane.object = "<h3>**Warning:** Source ID and destination collection are required</h3>"
+            self.record_output_pane.object = "<h3>Warning: Source ID and destination collection are required</h3>"
             return
         try:
             if self.selected_context:
@@ -225,9 +280,9 @@ class DataFedApp(param.Parameterized):
             )
             new_record_id = new_record[0].data[0].id
             self.df_api.dataMove(f"d/{self.source_id}", new_record_id)
-            self.record_output_pane.object = f"<h3>**Success:** Data transferred to new record ID: {new_record_id}</h3>"
+            self.record_output_pane.object = f"<h3>Success: Data transferred to new record ID: {new_record_id}</h3>"
         except Exception as e:
-            self.record_output_pane.object = f"<h3>**Error:** Failed to transfer data: {e}</h3>"
+            self.record_output_pane.object = f"<h3>Error: Failed to transfer data: {e}</h3>"
 
     def get_projects(self, event):
         try:
