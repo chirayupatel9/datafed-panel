@@ -51,7 +51,7 @@ record_pane = pn.Column(
     )
 )
 
-
+# conflict commit
 # Dynamically show the login pane or the record management pane based on login status
 @pn.depends(app.param.current_user)
 def main_content(current_user):
