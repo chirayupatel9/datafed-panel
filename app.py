@@ -44,14 +44,12 @@ record_pane = pn.Column(
             app.create_button, 
             app.record_output_pane
         )),
-        ("Read Record", pn.Column(pn.Param(app.param.record_id), app.read_button, app.record_output_pane,app.metadata_json_editor)),
-        ("Update Record", pn.Column(pn.Param(app.param.record_id), pn.Param(app.param.update_metadata, widgets={'update_metadata': pn.widgets.TextAreaInput}), app.update_button, app.record_output_pane)),
-        ("Delete Record", pn.Column(pn.Param(app.param.record_id), app.delete_button, app.record_output_pane)),
-        ("Transfer Data", pn.Column(pn.Param(app.param.source_id), pn.Param(app.param.dest_collection), app.transfer_button, app.record_output_pane)),
-    )
+        ("Read Record", pn.Column(pn.Param(app.param.record_id), pn.Column(app.read_button,app.update_button,app.delete_button,), app.record_output_pane,app.metadata_json_editor)),
+        
+        )
 )
 
-# conflict commit
+# conflict commit ("Transfer Data", pn.Column(pn.Param(app.param.source_id), pn.Param(app.param.dest_collection), app.transfer_button, app.record_output_pane)),
 # Dynamically show the login pane or the record management pane based on login status
 @pn.depends(app.param.current_user)
 def main_content(current_user):
