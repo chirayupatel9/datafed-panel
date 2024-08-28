@@ -1,15 +1,22 @@
 ## To run into docker
 ```
-docker build -t file-selector-app . 
+docker build -t datafed-app . 
 ``` 
 
 ```
-docker run -p 8501:8501 file-selector-app
+docker run -p 5006:5006 datafed-app
+```
+## Modify Env accordingly
+
+## To run locally 
+
+### Install requirements.txt
+```
+pip install -r requirements.txt
+```
+### Run App.py
 ```
 
+panel serve app.py --autoreload --port 5006
 
-## To run App.py
-
-```
-panel serve app.py --show
 ```

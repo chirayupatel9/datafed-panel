@@ -5,7 +5,11 @@ import panel as pn
 from datafed.CommandLib import API
 from file_selector import FileSelector
 from google.protobuf.json_format import MessageToJson
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
+FILE_PATH = os.getenv("FILE_PATH")
 pn.extension('material')
 pn.extension('jsoneditor')
 
@@ -75,7 +79,7 @@ class DataFedApp(param.Parameterized):
         self.metadata_json_editor = pn.widgets.JSONEditor(name='Metadata', width=600)
         self.record_output_pane = pn.pane.Markdown("<h3>Status Empty</h3>", name='Status', width=600)
 
-        self.file_selector = FileSelector("/")
+        self.file_selector = FileSelector(FILE_PATH)
         self.file_selector.param.watch(self.update_metadata_from_file_selector, 'value')
 
         self.param.watch(self.update_collections, 'selected_context')
