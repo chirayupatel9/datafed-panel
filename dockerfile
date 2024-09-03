@@ -18,7 +18,7 @@ EXPOSE 5006
 ENV NAME FileSelectorApp
 
 # Define environment variable to allow WebSocket origins
-ENV BOKEH_ALLOW_WS_ORIGIN=34.238.220.120:5006
+ENV BOKEH_ALLOW_WS_ORIGIN=0.0.0.0:5006
 
 # Run the file selector application
 
