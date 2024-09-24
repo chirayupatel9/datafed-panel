@@ -1,114 +1,67 @@
-from igor import binarywave as bw
+import os
 import json
-import numpy as np
+import mimetypes
+from PIL import Image
+from PyPDF2 import PdfReader
+from mutagen import File as MutagenFile
 
-
-def _read_parms(ibw_wave, codec='utf-8'):
-        
-        parm_string = ibw_wave.get('note')
-        if type(parm_string) == bytes:
-            try:
-                parm_string = parm_string.decode(codec)
-            except:
-                parm_string = parm_string.decode('ISO-8859-1')  # for older AR software
-        parm_string = parm_string.rstrip('\r')
-        parm_string = parm_string.replace(".","_")
-        parm_list = parm_string.split('\r')
-        parm_dict = dict()
-        for pair_string in parm_list:
-            temp = pair_string.split(':')
-            if len(temp) == 2:
-                temp = [item.strip() for item in temp]
-                try:
-                    num = float(temp[1])
-                    parm_dict[temp[0]] = num
-                    try:
-                        if num == int(num):
-                            parm_dict[temp[0]] = int(num)
-                    except OverflowError:
-                        pass
-                except ValueError:
-                    parm_dict[temp[0]] = temp[1]
-
-        # Grab the creation and modification times:
-        other_parms = ibw_wave.get('wave_header')
-        for key in ['creationDate', 'modDate', 'bname']:
-            try:
-                parm_dict[key] = other_parms[key]
-            except KeyError:
-                pass
-        return parm_dict
-
-
-
+def get_file_metadata(file_path):
+    """
+    Determines the file type and returns the corresponding metadata as a dictionary.
+    """
+    file_type, _ = mimetypes.guess_type(file_path)
     
-def _get_chan_labels(ibw_wave, codec='utf-8'):
-        
-        temp = ibw_wave.get('labels')
-        labels = []
-        for item in temp:
-            if len(item) > 0:
-                labels += item
-        for item in labels:
-            if item == '':
-                labels.remove(item)
-
-        default_units = list()
-        for chan_ind, chan in enumerate(labels):
-            # clean up channel names
-            if type(chan) == bytes:
-                chan = chan.decode(codec)
-            if chan.lower().rfind('trace') > 0:
-                labels[chan_ind] = chan[:chan.lower().rfind('trace') + 5]
-            else:
-                labels[chan_ind] = chan
-            # Figure out (default) units
-            if chan.startswith('Phase'):
-                default_units.append('deg')
-            elif chan.startswith('Current'):
-                default_units.append('A')
-            else:
-                default_units.append('m')
-
-        return labels, default_units
-    
-    
-def _parse_file_path(self, input_path):
-        pass
-
-def _read_data(self):
-        pass
-
-
-class MyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.integer):
-            return int(obj)
-        elif isinstance(obj, np.floating):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif isinstance(obj, bytes):
-            return str(obj)
+    if file_type:
+        if file_type.startswith('image'):
+            return get_image_metadata(file_path)
+        elif file_type == 'application/pdf':
+            return get_pdf_metadata(file_path)
+        elif file_type == 'application/json':
+            return get_json_metadata(file_path)
         else:
-            return super(MyEncoder, self).default(obj)
-        
-        
-def get_metadata(file_name):
-        
-        ibw_obj = bw.load(file_name)
-        parm_encoding='utf-8'
+            return get_generic_metadata(file_path)
+    else:
+        return get_generic_metadata(file_path)
 
-        ibw_wave = ibw_obj.get('wave')
-        parm_dict = _read_parms(ibw_wave, parm_encoding)
-        chan_labels, chan_units = _get_chan_labels(ibw_wave, parm_encoding)
-        
-        #Main data
-        # images = ibw_wave.get('wData')
+def get_image_metadata(file_path):
+    try:
+        with Image.open(file_path) as img:
+            return {
+                'format': img.format,
+                'mode': img.mode,
+                'size': img.size,
+                # 'info': img.info,
+            }
+    except Exception as e:
+        return {'error': str(e)}
 
-        #JSON serialize metadata
-        metadata = json.dumps(parm_dict, cls=MyEncoder)
-        metadata = json.loads(metadata)
-        #metadata.update({"File_path" : file_path})
+def get_pdf_metadata(file_path):
+    try:
+        with open(file_path, 'rb') as f:
+            reader = PdfReader(f)
+            metadata = reader.metadata
+            return {k[1:]: v for k, v in metadata.items()}
+    except Exception as e:
+        return {'error': str(e)}
 
-        return metadata
+def get_json_metadata(file_path):
+    try:
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        return {'error': str(e)}
+
+def get_generic_metadata(file_path):
+    try:
+        file_stats = os.stat(file_path)
+        return {
+            'size': file_stats.st_size,
+            'last_modified': file_stats.st_mtime,
+            'last_accessed': file_stats.st_atime,
+            'creation_time': file_stats.st_ctime,
+            'filename': os.path.basename(file_path),
+        }
+    except Exception as e:
+        return {'error': str(e)}
+
+print(get_file_metadata("D:\home\image.jpg"))

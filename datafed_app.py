@@ -7,6 +7,7 @@ from file_selector import FileSelector
 from google.protobuf.json_format import MessageToJson
 import os
 from dotenv import load_dotenv
+from util import get_file_metadata  # Import the utility function
 
 load_dotenv()
 FILE_PATH = os.getenv("FILE_PATH")
@@ -151,16 +152,18 @@ class DataFedApp(param.Parameterized):
             self.df_api.setContext(context)
             items_list = self.df_api.collectionItemsList('root', context=context)
             collections = {item.title: item.id for item in items_list[0].item if item.id.startswith("c/")}
-            collections['root']='root'
+            collections['root'] = 'root'
             return collections
         except Exception as e:
             return [f"Error: {e}"]
 
     def update_metadata_from_file_selector(self, event):
         try:
-            json_data = self.file_selector._update_output(self.file_selector.value)
-            if json_data:
-                self.metadata_json_editor.value = json_data
+            selected_file = self.file_selector.value[0] if self.file_selector.value else None
+            if selected_file:
+                print(f"Selected file: {self.file_selector.value}")
+                metadata = get_file_metadata(selected_file)  # Get metadata using utility function
+                self.metadata_json_editor.value = metadata if metadata else {}
             else:
                 self.metadata_json_editor.value = {}
         except json.JSONDecodeError as e:
@@ -178,6 +181,7 @@ class DataFedApp(param.Parameterized):
             response = self.df_api.dataCreate(
                 title=self.title,
                 metadata=json.dumps(self.metadata_json_editor.value),
+                metadata_file=self.file_selector.value,
                 parent_id=self.available_collections[self.selected_collection] 
             )
             record_id = response[0].data[0].id
@@ -373,7 +377,7 @@ class DataFedApp(param.Parameterized):
         try:
             response = self.df_api.projectList()
             projects = response[0].item
-            return [project.id for project in projects],[project.title for project in projects]
+            return [project.id for project in projects], [project.title for project in projects]
         except Exception as e:
             return [f"Error: {e}"]
 

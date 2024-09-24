@@ -77,7 +77,7 @@ class FileSelector(CompositeWidget):
         if self.refresh_period:
             self._periodic.start()
 
-        self._message = pn.pane.Markdown("<h3>Please select a JSON file</h3>", width_policy='max', height_policy='max')
+        self._message = pn.pane.Markdown("", width_policy='max', height_policy='max')
         self._selected_file_display = pn.pane.Markdown("", width_policy='max', height_policy='max')
         self._output = pn.Column(self._selected_file_display, self._message)
 
@@ -227,7 +227,7 @@ class FileSelector(CompositeWidget):
             return None
 
         selected_file = selected_files[0]
-        self._selected_file_display.object = f"**Selected File:** {selected_file}"
+        self._selected_file_display.object = f""
 
         if selected_file.endswith('.json'):
             with open(selected_file, 'r') as f:
