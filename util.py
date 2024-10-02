@@ -64,4 +64,3 @@ def get_generic_metadata(file_path):
     except Exception as e:
         return {'error': str(e)}
 
-print(get_file_metadata("D:\home\image.jpg"))

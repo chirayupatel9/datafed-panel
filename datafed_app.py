@@ -6,11 +6,19 @@ from datafed.CommandLib import API
 from file_selector import FileSelector
 from google.protobuf.json_format import MessageToJson
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv # type: ignore
 from util import get_file_metadata  # Import the utility function
 
 load_dotenv()
 FILE_PATH = os.getenv("FILE_PATH")
+# globus_key = "/shared-data/globus-endpoint_id.txt"
+ep=''
+# with open(globus_key, "r") as file:
+    # Read the entire file content
+    # content = file.read()
+    # print("Endpoint is:",content)
+    # ep=content
+print(f'os.environ:{ep}')
 pn.extension('material')
 pn.extension('jsoneditor')
 
@@ -47,6 +55,7 @@ class DataFedApp(param.Parameterized):
     show_login_panel = param.Boolean(default=False)
 
     original_metadata = param.Dict(default={}, label="Original Metadata")  # To track the original metadata
+    metadata_json_editor = pn.widgets.JSONEditor(name='Metadata', mode='text', width=600,)
 
     def __init__(self, **params):
         params['df_api'] = API() 
@@ -84,9 +93,11 @@ class DataFedApp(param.Parameterized):
         self.file_selector.param.watch(self.update_metadata_from_file_selector, 'value')
 
         self.param.watch(self.update_collections, 'selected_context')
+        self.param.watch(self.update_collections, 'selected_collection')
+
         self.metadata_json_editor.param.watch(self.on_metadata_change, 'value')
         self.param.watch(self.toggle_update_button_visibility, 'metadata_changed')
-
+        self.endpoint_pane = pn.pane.Markdown("<h3>Endpoint Not Connected</h3>", name='Endpoint_Status', width=600)
         pn.state.onload(self.initial_login_check)
 
     def initial_login_check(self):
@@ -100,6 +111,12 @@ class DataFedApp(param.Parameterized):
                 self.param['selected_context'].objects = self.available_contexts
                 self.selected_context = ids[0] if ids else None
                 self.record_output_pane.object = "<h3>User in session!</h3>"
+                if ep:
+                    self.df_api.endpointDefaultSet(ep)
+                    print(f"Successfully set up the endpoint with ID: {ep}")
+                else:
+                    print("No endpoint ID found. Please check the environment variable.")
+
             else:
                 self.current_user = "Not Logged In"
                 self.current_context = "No Context"
@@ -108,6 +125,9 @@ class DataFedApp(param.Parameterized):
 
     def toggle_login_panel(self, event=None):
         self.show_login_panel = not self.show_login_panel  
+    def toggle_update_button_visibility(self, event):
+        self.update_button.visible = self.metadata_changed
+
 
     def check_login(self, event):
         try:
@@ -124,10 +144,14 @@ class DataFedApp(param.Parameterized):
             self.selected_context = ids[0] if ids else None
             self.record_output_pane.object = "<h3>Login Successful!</h3>"
             self.show_login_panel = False
+            if ep:
+                self.df_api.endpointDefaultSet(ep)
+                print(f"Successfully set up the endpoint with ID: {ep}")
+            else:
+                print("No endpoint ID found. Please check the environment variable.")
             self.update_records()
         except Exception as e:
             self.record_output_pane.object = f"<h3>Invalid username or password: {e}</h3>"
-
     def logout(self, event):
         self.df_api.logout()
         self.current_user = "Not Logged In"
@@ -135,34 +159,37 @@ class DataFedApp(param.Parameterized):
         self.record_output_pane.object = "<h3>Logged out successfully!</h3>"
         self.username = ""
         self.password = ""
-
+                    
     def update_collections(self, event):
         context_id = self.selected_context
- 
+
         if context_id:
             collections = self.get_collections_in_context(context_id)
             self.available_collections = collections
-            self.param['selected_collection'].objects = collections
-            if collections:
-                self.selected_collection = next(iter(collections))
+            self.param['selected_collection'].objects = collections  # Update collection options in the Selector
+            if self.selected_collection is None:
+                self.selected_collection = 'root'  # Default to 'root'
             self.update_records()
+
 
     def get_collections_in_context(self, context):
         try:
             self.df_api.setContext(context)
             items_list = self.df_api.collectionItemsList('root', context=context)
             collections = {item.title: item.id for item in items_list[0].item if item.id.startswith("c/")}
-            collections['root'] = 'root'
+            collections['root'] = 'root' 
             return collections
         except Exception as e:
-            return [f"Error: {e}"]
+            print(f"Error fetching collections: {e}")
+            return {"Error": str(e)}
+
 
     def update_metadata_from_file_selector(self, event):
         try:
             selected_file = self.file_selector.value[0] if self.file_selector.value else None
             if selected_file:
                 print(f"Selected file: {self.file_selector.value}")
-                metadata = get_file_metadata(selected_file)  # Get metadata using utility function
+                metadata = get_file_metadata(selected_file) 
                 self.metadata_json_editor.value = metadata if metadata else {}
             else:
                 self.metadata_json_editor.value = {}
@@ -181,25 +208,31 @@ class DataFedApp(param.Parameterized):
             response = self.df_api.dataCreate(
                 title=self.title,
                 metadata=json.dumps(self.metadata_json_editor.value),
-                metadata_file=self.file_selector.value,
+                # metadata_file=self.file_selector.value,
+                #  external= True,
                 parent_id=self.available_collections[self.selected_collection] 
             )
             record_id = response[0].data[0].id
-            self.record_output_pane.object = f"<h3>Success: Record created with ID {record_id}</h3>"
+            try:
+                res = self.df_api.dataPut(
+                    data_id=record_id, 
+                    wait = False,
+                    path=self.file_selector.value[0]
+                    )
+                print(f"res:{res}")
+                self.record_output_pane.object = f"<h3>Success: Record created with ID {record_id}:{res}</h3>"
+            except Exception as e:
+                self.record_output_pane.object = f"<h3>Error: Failed to add file to record: {e}</h3>"    
+                
             self.update_records()
         except Exception as e:
             self.record_output_pane.object = f"<h3>Error: Failed to create record: {e}</h3>"
 
-    def update_records(self):
+    def update_records(self,event=None):
         try:
-            if not self.available_collections[self.selected_collection]:
-                self.record_output_pane.object = "<h3>Warning: Context or Collection not selected</h3>"
-                return
-            
-            items_list = self.df_api.collectionItemsList(coll_id=self.available_collections[self.selected_collection], context=self.selected_context)
-            
+            selected_collection = self.available_collections.get(self.selected_collection)
+            items_list = self.df_api.collectionItemsList(coll_id=self.selected_collection, context=self.selected_context)
             records = {item.title: item.id for item in items_list[0].item if item.id.startswith("d/")}
-            
             self.param['record_id'].objects = records
             if records:
                 self.record_id = next(iter(records))
@@ -213,10 +246,29 @@ class DataFedApp(param.Parameterized):
     def on_metadata_change(self, event):
         """Callback to handle changes in the JSON editor."""
         self.metadata_changed = True
-
-    def toggle_update_button_visibility(self, event):
-        """Toggle the visibility of the update button based on metadata changes."""
-        self.update_button.visible = self.metadata_changed
+    def update_metadata_from_file_selector(self, event):
+            try:
+                selected_file = self.file_selector.value[0] if self.file_selector.value else None
+                if selected_file:
+                    print(f"Selected file: {self.file_selector.value}")
+                    metadata = get_file_metadata(selected_file)  # Get metadata using utility function
+                    
+                    # If there is metadata, set the mode to 'tree'
+                    if metadata:
+                        self.metadata_json_editor.mode = 'tree'
+                        self.metadata_json_editor.value = metadata
+                    else:
+                        # If no metadata, set the mode to 'text'
+                        self.metadata_json_editor.mode = 'text'
+                        self.metadata_json_editor.value = {}
+                else:
+                    # If no file is selected, set the mode to 'text' and clear the editor
+                    self.metadata_json_editor.mode = 'text'
+                    self.metadata_json_editor.value = {}
+            except json.JSONDecodeError as e:
+                self.metadata_json_editor.value = {"error": f"Invalid JSON file: {e}"}
+            except Exception as e:
+                self.metadata_json_editor.value = {"error": f"Error processing file: {e}"}
 
     def read_record(self, event):
         if not self.record_id:
