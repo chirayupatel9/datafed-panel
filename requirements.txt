@@ -3,3 +3,7 @@ param
 flask
 datafed
 python-dotenv
+igor2
+h5py
+lxml
+hyperspy

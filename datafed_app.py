@@ -7,7 +7,7 @@ from file_selector import FileSelector
 from google.protobuf.json_format import MessageToJson
 import os
 from dotenv import load_dotenv # type: ignore
-from util import get_file_metadata  # Import the utility function
+from util import get_metadata  # Import the utility function
 
 load_dotenv()
 FILE_PATH = os.getenv("FILE_PATH")
@@ -189,7 +189,7 @@ class DataFedApp(param.Parameterized):
             selected_file = self.file_selector.value[0] if self.file_selector.value else None
             if selected_file:
                 print(f"Selected file: {self.file_selector.value}")
-                metadata = get_file_metadata(selected_file) 
+                metadata = get_metadata(selected_file) 
                 self.metadata_json_editor.value = metadata if metadata else {}
             else:
                 self.metadata_json_editor.value = {}
@@ -251,7 +251,7 @@ class DataFedApp(param.Parameterized):
                 selected_file = self.file_selector.value[0] if self.file_selector.value else None
                 if selected_file:
                     print(f"Selected file: {self.file_selector.value}")
-                    metadata = get_file_metadata(selected_file)  # Get metadata using utility function
+                    metadata = get_metadata(selected_file)  # Get metadata using utility function
                     
                     # If there is metadata, set the mode to 'tree'
                     if metadata:
